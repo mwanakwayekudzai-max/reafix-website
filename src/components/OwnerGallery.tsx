@@ -9,7 +9,7 @@ type GalleryImage = {
   public_url: string;
 };
 
-type AuthMode = 'sign-in' | 'sign-up';
+type AuthMode = 'sign-in' | 'sign-up' | 'reset-request' | 'reset-password';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -60,7 +60,14 @@ export default function OwnerGallery() {
 
     void loadImages();
     void supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthMode('reset-password');
+        setAuthOpen(true);
+        setMessage('Choose a new password for the owner account.');
+      }
+    });
     return () => listener.subscription.unsubscribe();
   }, []);
 
@@ -71,12 +78,22 @@ export default function OwnerGallery() {
 
     const result = authMode === 'sign-in'
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
+      : authMode === 'sign-up'
+        ? await supabase.auth.signUp({ email, password })
+        : authMode === 'reset-request'
+          ? await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+          : await supabase.auth.updateUser({ password });
 
     if (result.error) {
-      setMessage(getAuthMessage(authMode, result.error.message));
+      setMessage(getAuthMessage(authMode === 'reset-password' ? 'sign-up' : authMode, result.error.message));
     } else if (authMode === 'sign-up' && !result.data.session) {
       setMessage('Account created. Check your email to finish signing in.');
+    } else if (authMode === 'reset-request') {
+      setMessage('If an owner account uses that email, a password reset link is on its way.');
+    } else if (authMode === 'reset-password') {
+      setAuthOpen(false);
+      setMessage('Password updated. You can now use the new password to sign in.');
+      await supabase.auth.signOut();
     } else {
       setAuthOpen(false);
       setMessage('');
@@ -160,7 +177,7 @@ export default function OwnerGallery() {
           {session && <button onClick={() => void supabase.auth.signOut()} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-3 text-sm font-black text-[#10213b] transition hover:border-[#e1262f] hover:text-[#e1262f]"><LogOut size={16} /> Sign out</button>}
         </div>
 
-        {authOpen && !session && <form onSubmit={handleAuth} className="mt-8 max-w-xl rounded-2xl bg-[#f7f8fa] p-5 sm:p-6"><div className="mb-5 flex items-center justify-between"><div><h3 className="text-xl font-black text-[#10213b]">{authMode === 'sign-in' ? 'Owner sign in' : 'Create owner account'}</h3><p className="mt-1 text-sm text-slate-500">Only signed-in owners can add or remove pictures.</p></div><button type="button" onClick={() => setAuthOpen(false)} aria-label="Close sign in"><X size={20} /></button></div><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-bold text-[#10213b]">Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal outline-none focus:border-[#e1262f]" /></label><label className="text-sm font-bold text-[#10213b]">Password<input required minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal outline-none focus:border-[#e1262f]" /></label></div><button disabled={busy} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#e1262f] px-5 py-3 font-black text-white disabled:opacity-60">{authMode === 'sign-in' ? <LogIn size={17} /> : <LockKeyhole size={17} />}{authMode === 'sign-in' ? 'Sign in' : 'Create account'}</button><button type="button" onClick={() => setAuthMode((mode) => mode === 'sign-in' ? 'sign-up' : 'sign-in')} className="ml-4 text-sm font-bold text-[#e1262f]">{authMode === 'sign-in' ? 'Create an account' : 'I already have an account'}</button></form>}
+        {authOpen && (!session || authMode === 'reset-password') && <form onSubmit={handleAuth} className="mt-8 max-w-xl rounded-2xl bg-[#f7f8fa] p-5 sm:p-6"><div className="mb-5 flex items-center justify-between"><div><h3 className="text-xl font-black text-[#10213b]">{authMode === 'sign-in' ? 'Owner sign in' : authMode === 'sign-up' ? 'Create owner account' : authMode === 'reset-request' ? 'Reset owner password' : 'Choose a new password'}</h3><p className="mt-1 text-sm text-slate-500">{authMode === 'reset-password' ? 'Use at least 8 characters.' : 'Only signed-in owners can add or remove pictures.'}</p></div><button type="button" onClick={() => setAuthOpen(false)} aria-label="Close sign in"><X size={20} /></button></div><div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-bold text-[#10213b]">Email<input required={authMode !== 'reset-password'} type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal outline-none focus:border-[#e1262f]" /></label>{authMode !== 'reset-request' && <label className="text-sm font-bold text-[#10213b]">{authMode === 'reset-password' ? 'New password' : 'Password'}<input required minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal outline-none focus:border-[#e1262f]" /></label>}</div><button disabled={busy} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#e1262f] px-5 py-3 font-black text-white disabled:opacity-60">{authMode === 'sign-in' ? <LogIn size={17} /> : <LockKeyhole size={17} />}{authMode === 'sign-in' ? 'Sign in' : authMode === 'sign-up' ? 'Create account' : authMode === 'reset-request' ? 'Send reset link' : 'Save new password'}</button>{authMode === 'sign-in' && <><button type="button" onClick={() => setAuthMode('reset-request')} className="ml-4 text-sm font-bold text-[#e1262f]">Forgot password?</button><button type="button" onClick={() => setAuthMode('sign-up')} className="ml-4 text-sm font-bold text-[#e1262f]">Create an account</button></>}{authMode === 'sign-up' && <button type="button" onClick={() => setAuthMode('sign-in')} className="ml-4 text-sm font-bold text-[#e1262f]">I already have an account</button>}{authMode === 'reset-request' && <button type="button" onClick={() => setAuthMode('sign-in')} className="ml-4 text-sm font-bold text-[#e1262f]">Back to sign in</button>}</form>}
 
         {session && <div className="mt-8 rounded-2xl bg-[#10213b] p-5 text-white sm:flex sm:items-center sm:justify-between sm:gap-5"><div><h3 className="font-black">Add a new picture</h3><p className="mt-1 text-sm text-slate-300">JPG, PNG or WebP files up to 5 MB.</p></div><div className="mt-4 flex flex-col gap-3 sm:mt-0 sm:flex-row sm:items-center"><label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-black text-[#10213b] hover:bg-[#fffbea]"><ImagePlus size={17} /> Choose picture<input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFileChange} className="sr-only" /></label><button onClick={() => void handleUpload()} disabled={!selectedFile || busy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ffd42a] px-4 py-3 text-sm font-black text-[#10213b] disabled:cursor-not-allowed disabled:opacity-50"><Upload size={17} /> Upload picture</button></div></div>}
 
