@@ -16,7 +16,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 function getAuthMessage(mode: AuthMode, errorMessage: string) {
   const normalizedMessage = errorMessage.toLowerCase();
 
-  if (mode === 'sign-up' && (normalizedMessage.includes('already registered') || normalizedMessage.includes('already exists'))) {
+  if (mode === 'sign-up' && (normalizedMessage.includes('already registered') || normalizedMessage.includes('already exists') || normalizedMessage.includes('user_already_exists'))) {
     return 'That email already has an owner account. Choose “I already have an account” below and sign in.';
   }
 
