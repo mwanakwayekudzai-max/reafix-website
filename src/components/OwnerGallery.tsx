@@ -24,8 +24,16 @@ function getAuthMessage(mode: AuthMode, errorMessage: string) {
     return 'That email or password is not correct. Please try again.';
   }
 
-  if (normalizedMessage.includes('password')) {
+  if (normalizedMessage.includes('password') && (normalizedMessage.includes('at least') || normalizedMessage.includes('8 characters') || normalizedMessage.includes('too short'))) {
     return 'Please use a password with at least 8 characters.';
+  }
+
+  if (normalizedMessage.includes('password') && (normalizedMessage.includes('weak') || normalizedMessage.includes('common') || normalizedMessage.includes('breached') || normalizedMessage.includes('pwned'))) {
+    return 'That password is too easy to guess or has appeared in a data breach. Please choose a different password with at least 8 characters.';
+  }
+
+  if (normalizedMessage.includes('password')) {
+    return 'That password could not be accepted. Please choose a different password with at least 8 characters.';
   }
 
   if (normalizedMessage.includes('email')) {
@@ -75,6 +83,12 @@ export default function OwnerGallery() {
     event.preventDefault();
     setBusy(true);
     setMessage('');
+
+    if (authMode !== 'reset-request' && password.length < 8) {
+      setMessage('Please use a password with at least 8 characters.');
+      setBusy(false);
+      return;
+    }
 
     const result = authMode === 'sign-in'
       ? await supabase.auth.signInWithPassword({ email, password })
